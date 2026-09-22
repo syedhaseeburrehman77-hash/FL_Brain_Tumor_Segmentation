@@ -1,8 +1,6 @@
-from .brain_tumor_dataset import BrainTumorLoader
-#from .kaggle_mri_dataset import KaggleMRILoader
-
+from .fets_dataset import FeTSDatasetLoader
 
 DATASET_REGISTRY = {
-    "brain_tumor": BrainTumorLoader,
-#    "kaggle_mri": KaggleMRILoader,
+    "fets2022": FeTSDatasetLoader,
+    "brain_tumor": FeTSDatasetLoader,  # alias for backwards compatibility
 }
