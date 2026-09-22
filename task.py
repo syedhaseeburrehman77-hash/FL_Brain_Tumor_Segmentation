@@ -1,82 +1,76 @@
-"""pytorchexample: A Flower / PyTorch app."""
+"""FeTS 2022 3D MRI Brain Tumor Segmentation: Task and Evaluation Module."""
 
+import tomllib
+from pathlib import Path
 import torch
 import torch.nn as nn
 from datasets_loaders import create_dataset
-from torch.utils.data import DataLoader
-from torchvision.transforms import Compose, Resize, ToTensor, Normalize, Lambda
-from utils.partitioner_helper import get_partitioner
-from collections import Counter
+from monai.inferers import sliding_window_inference
+from monai.losses import DiceCELoss
+from dataset import fets_region_metrics
 
-pytorch_transforms = Compose([
-    Lambda(lambda img: img.convert("RGB")),
-    Resize((224, 224)),
-    ToTensor(),
-    Normalize(
-        mean=[0.485, 0.456, 0.406],
-        std=[0.229, 0.224, 0.225],
-    ),
-])
+_LOADER = None
 
-def apply_transforms(batch):
-    """Apply transforms to the partition from FederatedDataset."""
-    batch["img"] = [pytorch_transforms(img) for img in batch["img"]]
-    return batch
-
-brain_dataset = None
-
-def get_dataset():
-    global brain_dataset
-    DATASET_PATH = "data/brain-tumor-multimodal-image"
-    if brain_dataset is None:
-        loader = create_dataset('brain_tumor', DATASET_PATH)
-        brain_dataset = loader.load()
-
-    return brain_dataset
-
-def load_data(partition_id: int, num_partitions: int, batch_size: int):
-
-    brain_dataset = get_dataset()
-    partitioner = get_partitioner(num_partitions)
+def get_loader(context=None):
+    global _LOADER
+    if _LOADER is not None:
+        return _LOADER
     
-    partitioner.dataset = brain_dataset["train"]
-    partition = partitioner.load_partition(partition_id)
+    if context is not None:
+        cfg = context.run_config
+    else:
+        cfg = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))["tool"]["flwr"]["app"]["config"]
 
-    print(f"Client {partition_id}: Partition size = {len(partition)}")
+    _LOADER = create_dataset(
+        "fets2022",
+        root_dir=cfg["data-root"],
+        partition_csv=cfg["partition-csv"],
+        global_test_fraction=float(cfg.get("global-test-fraction", 0.15)),
+        seed=int(cfg.get("seed", 42)),
+    )
+    return _LOADER
 
-    print(Counter(partition["modality"]))
-    print(Counter(partition["label"]))
- 
-    partition = partition.train_test_split(test_size=0.2, seed=42,)
-
-    print(f"Client {partition_id}: train={len(partition["train"])}, test={len(partition["test"])}")
-
-    partition = partition.with_transform(apply_transforms)
-    trainloader = DataLoader( partition["train"], batch_size=batch_size, shuffle=True,)
-    testloader = DataLoader(partition["test"], batch_size=batch_size, shuffle=False,)
-
-    return trainloader, testloader
+def load_data(partition_id: int, context):
+    loader = get_loader(context)
+    batch_size = int(context.run_config.get("batch-size", 1))
+    return loader.load_partition(partition_id=partition_id, batch_size=batch_size)
 
 def load_centralized_dataset():
     """Load test set and return dataloader."""
     # Load entire test set
-    dataset = get_dataset()
-    test_dataset = dataset["test"]
-    dataset = test_dataset.with_format("torch").with_transform(apply_transforms)
-    return DataLoader(dataset, batch_size=128)
+    loader = get_loader()
+    return loader.load_global_test(batch_size=1)
 
-def test(net, testloader, device):
-    """Validate the model on the test set."""
+def test(net: torch.nn.Module, testloader, device: torch.device) -> dict[str, float]:
+    """Evaluate 3D U-Net using sliding-window inference and return Dice/HD95 metrics."""
+    net.eval()
     net.to(device)
-    criterion = torch.nn.CrossEntropyLoss()
-    correct, loss = 0, 0.0
+    criterion = DiceCELoss(to_onehot_y=True, softmax=True)
+    totals = {
+        "eval_loss": 0.0,
+        "dice_et": 0.0,
+        "dice_tc": 0.0,
+        "dice_wt": 0.0,
+        "hd95_et": 0.0,
+        "hd95_tc": 0.0,
+        "hd95_wt": 0.0,
+    }
     with torch.no_grad():
         for batch in testloader:
-            images = batch["img"].to(device)
-            labels = batch["label"].to(device)
-            outputs = net(images)
-            loss += criterion(outputs, labels).item()
-            correct += (torch.max(outputs.data, 1)[1] == labels).sum().item()
-    accuracy = correct / len(testloader.dataset)
-    loss = loss / len(testloader)
-    return loss, accuracy
+            images = batch["image"].to(device)
+            labels = batch["label"].to(device).long()
+            # 3D sliding window inference with 96x96x96 patches
+            logits = sliding_window_inference(
+                inputs=images,
+                roi_size=(96, 96, 96),
+                sw_batch_size=1,
+                predictor=net,
+            )
+            totals["eval_loss"] += criterion(logits, labels).item()
+            # Calculate Dice and Hausdorff HD95 for ET, TC, and WT
+            region_scores = fets_region_metrics(logits, labels)
+            for key in ("dice_et", "dice_tc", "dice_wt", "hd95_et", "hd95_tc", "hd95_wt"):
+                if key in region_scores:
+                    totals[key] += region_scores[key]
+    count = max(len(testloader), 1)
+    return {k: round(v / count, 4) for k, v in totals.items()}
