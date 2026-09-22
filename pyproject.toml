@@ -3,16 +3,20 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "quickstart-pytorch"
+name = "fets2022-flower"
 version = "1.1.6"
-description = "Federated Learning with PyTorch and Flower (Quickstart Example)"
+description = "FeTS 2022 3D MRI Federated Brain Tumor Segmentation with Flower"
 license = {file = "LICENSE"}
+
+requires-python = ">=3.11,<3.12"
 dependencies = [
-    "flwr[simulation]>=1.28.0",
-    "flwr-datasets[vision]>=0.6.0",
-    "torch==2.10.0",
-    "torchvision==0.25.0",
-    "pytest"
+    "flwr[simulation]==1.37.0",
+    "torch==2.1.0",
+    "monai>=1.3.0",
+    "nibabel>=5.2.0",
+    "pandas>=2.1.0",
+    "scipy>=1.11.0",
+    "numpy>=1.26.0,<3.0.0"
 ]
 
 #[tool.uv.sources]
@@ -34,26 +38,38 @@ packages = ["."]
 [tool.flwr.app]
 publisher = "flwrlabs"
 fab-format-version = 1
-flwr-version-target = "1.31.0"
+flwr-version-target = "1.37.0"
 
 [tool.flwr.app.components]
 serverapp = "server_app:app"
 clientapp = "client_app:app"
 
 [tool.flwr.app.config]
-num-server-rounds = 2
+# Dataset paths (Official FeTS 2022 Multi-Institutional Data)
+data-root = "C:/Users/syedh/Documents/BraT_Segmentation_FeTs2022/MICCAI_FeTS2022_TrainingData"
+
+# Use partitioning_1.csv (23 institutions) or partitioning_2.csv (33 institutions)
+partition-csv = "C:/Users/syedh/Documents/BraT_Segmentation_FeTs2022/MICCAI_FeTS2022_TrainingData/partitioning_1.csv"
+
+num-server-rounds = 5
+fraction-train = 1.0
 fraction-evaluate = 1.0
 local-epochs = 1
-learning-rate = 0.1
-batch-size = 32
-save-model = false
+learning-rate =  0.00005
+batch-size = 1
+global-test-fraction = 0.15
+
 fraction-fit = 1.0
-min-available-clients = 2
+num-clients = 23
 algorithm = "fedavg"
 proximal-mu = 0.01
-model_name = "mobilenet"
+model_name = "3DUnet"
 
-[partition]
-type = "iid"         # options: iid, dirichlet, shard
-alpha = 0.5          # used only for dirichlet
-num_shards = 2       # used only for shard
+# Client Participation ("fixed" or "sliding")
+collaborator-selector = "fixed"
+collaborator-fraction = 0.2
+collaborator-selector-seed = 42
+
+# RegSimAgg Hyperparameters (Temporal Damping & Distance Metric)
+regsimagg-regularization-round = 10
+regsimagg-distance-mode = "paper_l1"
