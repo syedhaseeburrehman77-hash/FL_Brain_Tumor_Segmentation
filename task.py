@@ -4,10 +4,11 @@ import tomllib
 from pathlib import Path
 import torch
 import torch.nn as nn
+from flwr.app import Context
 from datasets_loaders import create_dataset
 from monai.inferers import sliding_window_inference
 from monai.losses import DiceCELoss
-from dataset import fets_region_metrics
+from utils.metrics import fets_region_metrics
 
 _LOADER = None
 
