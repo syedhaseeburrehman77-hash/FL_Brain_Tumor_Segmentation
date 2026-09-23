@@ -1,6 +1,10 @@
+import csv
+from pathlib import Path
 import torch
 from flwr.app import ArrayRecord, ConfigRecord, Context, MetricRecord
 from flwr.serverapp import Grid, ServerApp
+
+_ALGORITHM = "fedavg"
 
 from task import get_loader, load_centralized_dataset, test
 from algorithms.server_strategies import get_strategy
@@ -18,7 +22,9 @@ def main(grid: Grid, context: Context) -> None:
     # Initialize data loader with run context
     get_loader(context)
 
-    algorithm = context.run_config["algorithm"]
+    global _ALGORITHM
+    _ALGORITHM = context.run_config["algorithm"]
+    algorithm = _ALGORITHM
 
     # Read run config
     fraction_evaluate: float = context.run_config["fraction-evaluate"]
@@ -57,10 +63,12 @@ def main(grid: Grid, context: Context) -> None:
     )
 
     if context.run_config.get("save-model", True):
-        # Save final model to disk
-        print("\nSaving final model to disk...", flush=True)
+        # Save final model to artifacts/
+        artifacts_dir = Path("artifacts")
+        artifacts_dir.mkdir(parents=True, exist_ok=True)
+        print("\nSaving final model to artifacts/final_model.pt...", flush=True)
         state_dict = result.arrays.to_torch_state_dict()
-        torch.save(state_dict, "final_model.pt")
+        torch.save(state_dict, artifacts_dir / "final_model.pt")
 
 
 def global_evaluate(server_round: int, arrays: ArrayRecord) -> MetricRecord:
@@ -92,6 +100,28 @@ def global_evaluate(server_round: int, arrays: ArrayRecord) -> MetricRecord:
         device,
     )
     print(f"[Server] ---> Round {server_round} Test Results | Loss: {eval_metrics.get('eval_loss', 0.0):.4f} | Dice (ET/TC/WT): {eval_metrics.get('dice_et', 0.0):.4f} / {eval_metrics.get('dice_tc', 0.0):.4f} / {eval_metrics.get('dice_wt', 0.0):.4f}", flush=True)
+
+    # Save metrics to artifacts/detail_metrics_{strategy}.csv
+    artifacts_dir = Path("artifacts")
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
+    csv_file = artifacts_dir / f"detail_metrics_{_ALGORITHM}.csv"
+    file_exists = csv_file.exists()
+    row = {
+        "strategy": _ALGORITHM,
+        "round": server_round,
+        "test_loss": eval_metrics.get("eval_loss", 0.0),
+        "dice_et": eval_metrics.get("dice_et", 0.0),
+        "dice_tc": eval_metrics.get("dice_tc", 0.0),
+        "dice_wt": eval_metrics.get("dice_wt", 0.0),
+        "hd95_et": eval_metrics.get("hd95_et", 0.0),
+        "hd95_tc": eval_metrics.get("hd95_tc", 0.0),
+        "hd95_wt": eval_metrics.get("hd95_wt", 0.0),
+    }
+    with open(csv_file, mode="a", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=list(row.keys()))
+        if not file_exists:
+            writer.writeheader()
+        writer.writerow(row)
 
     # Return evaluation metrics
     return MetricRecord(eval_metrics)

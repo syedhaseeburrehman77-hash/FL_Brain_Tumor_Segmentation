@@ -1,5 +1,7 @@
 """FeTS 2022 3D MRI Brain Tumor Segmentation: Flower ClientApp."""
 
+import csv
+from pathlib import Path
 import torch
 from flwr.app import ArrayRecord, Context, Message, MetricRecord, RecordDict
 from flwr.clientapp import ClientApp
@@ -52,6 +54,7 @@ def train(msg: Message, context: Context):
         device,
     )
     print(f"[Client {partition_id}] ---> Training completed! Loss: {train_loss:.4f}", flush=True)
+    context.state["last_train_loss"] = float(train_loss)
 
     # Return updated model and training metrics
     model_record = ArrayRecord(model.state_dict())
@@ -102,6 +105,37 @@ def evaluate(msg: Message, context: Context):
         device,
     )
     print(f"[Client {partition_id}] ---> Evaluation completed! Loss: {eval_metrics.get('eval_loss', 0.0):.4f} | Dice WT: {eval_metrics.get('dice_wt', 0.0):.4f}", flush=True)
+
+    # Save client metrics to artifacts/client_history.csv
+    artifacts_dir = Path("artifacts")
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
+    csv_file = artifacts_dir / "client_history.csv"
+    file_exists = csv_file.exists()
+
+    current_round = int(context.state.get("current_round", 1))
+    context.state["current_round"] = current_round + 1
+    train_loss = float(context.state.get("last_train_loss", 0.0))
+    algorithm = str(context.run_config.get("algorithm", "fedavg"))
+
+    row = {
+        "strategy": algorithm,
+        "round": current_round,
+        "institution_id": partition_id,
+        "train_loss": train_loss,
+        "eval_loss": eval_metrics.get("eval_loss", 0.0),
+        "dice_et": eval_metrics.get("dice_et", 0.0),
+        "dice_tc": eval_metrics.get("dice_tc", 0.0),
+        "dice_wt": eval_metrics.get("dice_wt", 0.0),
+        "hd95_et": eval_metrics.get("hd95_et", 0.0),
+        "hd95_tc": eval_metrics.get("hd95_tc", 0.0),
+        "hd95_wt": eval_metrics.get("hd95_wt", 0.0),
+        "num_examples": len(valloader.dataset),
+    }
+    with open(csv_file, mode="a", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=list(row.keys()))
+        if not file_exists:
+            writer.writeheader()
+        writer.writerow(row)
 
     # Return evaluation metrics
     metrics = {
