@@ -32,17 +32,17 @@ def train(msg: Message, context: Context):
     # Load local training data
     partition_id = int(context.node_config["partition-id"])
     trainloader, _ = load_data(partition_id, context)
-    print(f"\n[Client {partition_id}] ---> Loaded {len(trainloader.dataset)} patients from FeTS institution partition.")
+    print(f"\n[Client {partition_id}] ---> Loaded {len(trainloader.dataset)} patients from FeTS institution partition.", flush=True)
 
     # Get training algorithm
     algorithm = context.run_config["algorithm"]
 
     trainer = get_trainer(
         algorithm,
-        proximal_mu=msg.content["config"].get("proximal_mu", 0.0),
+        proximal_mu=float(msg.content["config"].get("proximal_mu", context.run_config.get("proximal_mu", 0.01))),
     )
 
-    print(f"[Client {partition_id}] ---> Starting 3D U-Net training on {device}...")
+    print(f"[Client {partition_id}] ---> Starting 3D U-Net training on {device}...", flush=True)
     # Train the model
     train_loss = trainer.train(
         model,
@@ -51,7 +51,7 @@ def train(msg: Message, context: Context):
         msg.content["config"]["lr"],
         device,
     )
-    print(f"[Client {partition_id}] ---> Training completed! Loss: {train_loss:.4f}")
+    print(f"[Client {partition_id}] ---> Training completed! Loss: {train_loss:.4f}", flush=True)
 
     # Return updated model and training metrics
     model_record = ArrayRecord(model.state_dict())
@@ -93,7 +93,7 @@ def evaluate(msg: Message, context: Context):
     # Load local validation data
     partition_id = int(context.node_config["partition-id"])
     _, valloader = load_data(partition_id, context)
-    print(f"\n[Client {partition_id}] ---> Evaluating on {len(valloader.dataset)} local validation patients...")
+    print(f"\n[Client {partition_id}] ---> Evaluating on {len(valloader.dataset)} local validation patients...", flush=True)
 
     # Evaluate the model
     eval_metrics = test_fn(
@@ -101,7 +101,7 @@ def evaluate(msg: Message, context: Context):
         valloader,
         device,
     )
-    print(f"[Client {partition_id}] ---> Evaluation completed! Loss: {eval_metrics.get('eval_loss', 0.0):.4f} | Dice WT: {eval_metrics.get('dice_wt', 0.0):.4f}")
+    print(f"[Client {partition_id}] ---> Evaluation completed! Loss: {eval_metrics.get('eval_loss', 0.0):.4f} | Dice WT: {eval_metrics.get('dice_wt', 0.0):.4f}", flush=True)
 
     # Return evaluation metrics
     metrics = {
