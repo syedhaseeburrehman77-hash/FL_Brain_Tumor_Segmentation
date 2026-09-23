@@ -22,10 +22,20 @@ def get_loader(context=None):
     else:
         cfg = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))["tool"]["flwr"]["app"]["config"]
 
+     # Resolve relative paths against the repository root
+    project_root = Path(__file__).parent.resolve()
+    
+    data_root = Path(cfg["data-root"])
+    if not data_root.is_absolute():
+        data_root = project_root / data_root
+    partition_csv = Path(cfg["partition-csv"])
+    if not partition_csv.is_absolute():
+        partition_csv = project_root / partition_csv
+
     _LOADER = create_dataset(
         "fets2022",
-        root_dir=cfg["data-root"],
-        partition_csv=cfg["partition-csv"],
+        root_dir=data_root,
+        partition_csv=partition_csv,
         global_test_fraction=float(cfg.get("global-test-fraction", 0.15)),
         seed=int(cfg.get("seed", 42)),
     )
