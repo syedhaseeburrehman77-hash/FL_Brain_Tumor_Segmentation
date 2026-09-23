@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 import torch
+from monai.losses import DiceCELoss
 
 class BaseTrainer(ABC):
     """Common interface every algorithm trainer must implement."""
@@ -24,16 +25,16 @@ class BaseTrainer(ABC):
 
         model.to(device)
         model.train()
-        criterion = torch.nn.CrossEntropyLoss()
-        optimizer = torch.optim.SGD(model.parameters(), lr=lr)
+        criterion = DiceCELoss(to_onehot_y=True, softmax=True)
+        optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-5)
 
         total_loss = 0.0
         num_batches = 0
         for _ in range(epochs):
             for batch in trainloader:
-                images, labels = batch["img"].to(device), batch["label"].to(device)
+                images, labels = batch["image"].to(device), batch["label"].to(device).long()
 
-                optimizer.zero_grad()
+                optimizer.zero_grad(set_to_none=True)
                 outputs = model(images)
                 loss = self.compute_loss(model, outputs, labels, criterion)
                 loss.backward()
@@ -42,4 +43,4 @@ class BaseTrainer(ABC):
                 total_loss += loss.item()
                 num_batches += 1
 
-        return total_loss / num_batches
+        return total_loss / max(num_batches, 1)

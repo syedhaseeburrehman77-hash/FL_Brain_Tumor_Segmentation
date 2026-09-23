@@ -46,7 +46,7 @@ class FeTSDatasetLoader(BaseDatasetLoader):
         return Compose([
             LoadImaged(keys=("image", "label")),
             EnsureChannelFirstd(keys=("image", "label")),
-            Orientationd(keys=("image", "label"), axcodes="RAS"),
+            Orientationd(keys=("image", "label"), axcodes="RAS", labels=None),
             Spacingd(keys=("image", "label"), pixdim=(1.0, 1.0, 1.0), mode=("bilinear", "nearest")),
             NormalizeIntensityd(keys="image", nonzero=True, channel_wise=True),
             MapLabelValued(keys="label", orig_labels=[4], target_labels=[3]),
@@ -72,7 +72,7 @@ class FeTSDatasetLoader(BaseDatasetLoader):
         return Compose([
             LoadImaged(keys=("image", "label")),
             EnsureChannelFirstd(keys=("image", "label")),
-            Orientationd(keys=("image", "label"), axcodes="RAS"),
+            Orientationd(keys=("image", "label"), axcodes="RAS", labels=None),
             Spacingd(keys=("image", "label"), pixdim=(1.0, 1.0, 1.0), mode=("bilinear", "nearest")),
             NormalizeIntensityd(keys="image", nonzero=True, channel_wise=True),
             MapLabelValued(keys="label", orig_labels=[4], target_labels=[3]),
