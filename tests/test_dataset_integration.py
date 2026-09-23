@@ -47,8 +47,8 @@ def test_client_partition_loaders(loader):
     """Test train and validation loaders for institution 0."""
     train_loader, val_loader = loader.load_partition(partition_id=0, batch_size=1)
 
-    assert len(train_loader.dataset) > 0, "Train dataset should not be empty"
-    assert len(val_loader.dataset) > 0, "Validation dataset should not be empty"
+    assert len(train_loader.dataset) == 369, "Train dataset should not be empty"
+    assert len(val_loader.dataset) == 65, "Validation dataset should not be empty"
 
 
 def test_3d_batch_tensor_shapes(loader):
