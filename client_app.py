@@ -3,7 +3,7 @@
 import csv
 from pathlib import Path
 import torch
-from flwr.app import ArrayRecord, Context, Message, MetricRecord, RecordDict
+from flwr.app import ArrayRecord, ConfigRecord, Context, Message, MetricRecord, RecordDict
 from flwr.clientapp import ClientApp
 from task import load_data, test as test_fn
 from algorithms import get_trainer
@@ -18,7 +18,8 @@ def train(msg: Message, context: Context):
     """Train the 3D U-Net on local institutional MRI data."""
 
     # Create the model using the model registry
-    model = create_model("unet")
+    model_name = context.run_config.get("model_name", "unet").lower()
+    model = create_model(model_name)
 
     # Load the weights received from the server
     model.load_state_dict(
@@ -54,8 +55,13 @@ def train(msg: Message, context: Context):
         device,
     )
     print(f"[Client {partition_id}] ---> Training completed! Loss: {train_loss:.4f}", flush=True)
-    context.state["last_train_loss"] = float(train_loss)
 
+    state = context.state.get("client_state", ConfigRecord({}))
+    current_round = int(state.get("current_round", 1))
+    context.state["client_state"] = ConfigRecord({
+        "last_train_loss": float(train_loss),
+        "current_round": current_round,
+    })
     # Return updated model and training metrics
     model_record = ArrayRecord(model.state_dict())
 
@@ -80,7 +86,8 @@ def evaluate(msg: Message, context: Context):
     """Evaluate the 3D U-Net on local institutional MRI data."""
 
     # Create the model using the model registry
-    model = create_model("unet")
+    model_name = context.run_config.get("model_name", "unet").lower()
+    model = create_model(model_name)
 
     # Load the weights received from the server
     model.load_state_dict(
@@ -112,9 +119,14 @@ def evaluate(msg: Message, context: Context):
     csv_file = artifacts_dir / "client_history.csv"
     file_exists = csv_file.exists()
 
-    current_round = int(context.state.get("current_round", 1))
-    context.state["current_round"] = current_round + 1
-    train_loss = float(context.state.get("last_train_loss", 0.0))
+    state = context.state.get("client_state", ConfigRecord({}))
+    train_loss = float(state.get("last_train_loss", 0.0))
+    current_round = int(state.get("current_round", 1))
+
+    context.state["client_state"] = ConfigRecord({
+    "last_train_loss": train_loss,
+    "current_round": current_round + 1,
+})
     algorithm = str(context.run_config.get("algorithm", "fedavg"))
 
     row = {

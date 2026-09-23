@@ -1,5 +1,6 @@
 """FeTS 2022 3D MRI Brain Tumor Segmentation: Task and Evaluation Module."""
 
+import csv
 import tomllib
 from pathlib import Path
 import torch
@@ -85,3 +86,42 @@ def test(net: torch.nn.Module, testloader, device: torch.device) -> dict[str, fl
                     totals[key] += region_scores[key]
     count = max(len(testloader), 1)
     return {k: round(v / count, 4) for k, v in totals.items()}
+
+def run_global_benchmark(model: torch.nn.Module, device: torch.device, algorithm: str = "fedavg") -> dict[str, float]:
+    """Run one-off final benchmark on the unseen global test set and save to artifacts."""
+    print(f"\n[Server] ---> Running Final Benchmark on Unseen Test Set ({algorithm.upper()})...", flush=True)
+
+    test_dataloader = load_centralized_dataset()
+    eval_metrics = test(model, test_dataloader, device)
+
+    print(
+        f"[Server] ---> Final Test Results | "
+        f"Loss: {eval_metrics.get('eval_loss', 0.0):.4f} | "
+        f"Dice (ET/TC/WT): {eval_metrics.get('dice_et', 0.0):.4f} / {eval_metrics.get('dice_tc', 0.0):.4f} / {eval_metrics.get('dice_wt', 0.0):.4f} | "
+        f"HD95 (ET/TC/WT): {eval_metrics.get('hd95_et', 0.0):.2f} / {eval_metrics.get('hd95_tc', 0.0):.2f} / {eval_metrics.get('hd95_wt', 0.0):.2f}",
+        flush=True,
+    )
+
+    # Save final benchmark to artifacts/detail_metrics_{algorithm}.csv
+    artifacts_dir = Path("artifacts")
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
+    csv_file = artifacts_dir / f"detail_metrics_{algorithm}.csv"
+    file_exists = csv_file.exists()
+
+    row = {
+        "strategy": algorithm,
+        "test_loss": eval_metrics.get("eval_loss", 0.0),
+        "dice_et": eval_metrics.get("dice_et", 0.0),
+        "dice_tc": eval_metrics.get("dice_tc", 0.0),
+        "dice_wt": eval_metrics.get("dice_wt", 0.0),
+        "hd95_et": eval_metrics.get("hd95_et", 0.0),
+        "hd95_tc": eval_metrics.get("hd95_tc", 0.0),
+        "hd95_wt": eval_metrics.get("hd95_wt", 0.0),
+    }
+    with open(csv_file, mode="a", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=list(row.keys()))
+        if not file_exists:
+            writer.writeheader()
+        writer.writerow(row)
+
+    return eval_metrics
