@@ -142,6 +142,8 @@ rabbitmq/
 rabbitmq-data/
 
 data/
+*.pt
+final_model.pt
 
 # ActiveMQ
 activemq-data/
