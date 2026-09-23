@@ -1,16 +1,13 @@
 """FeTS 2022 3D MRI Brain Tumor Segmentation: Flower ClientApp."""
 
-from multiprocessing import context
-
 import torch
 from flwr.app import ArrayRecord, Context, Message, MetricRecord, RecordDict
 from flwr.clientapp import ClientApp
 
 from task import load_data, test as test_fn
-
 from algorithms import get_trainer
+from models import create_model
 
-from ML_model import build_model
 
 # Flower ClientApp
 app = ClientApp()
@@ -18,27 +15,35 @@ app = ClientApp()
 
 @app.train()
 def train(msg: Message, context: Context):
-    """Train the 3D UNet on local institutional MRI data."""
+    """Train the 3D U-Net on local institutional MRI data."""
 
-    # Load the model and initialize it with the received weights
-    model = build_model()
-    model.load_state_dict(msg.content["arrays"].to_torch_state_dict())
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    # Create the model using the model registry
+    model = create_model("unet")
+
+    # Load the weights received from the server
+    model.load_state_dict(
+        msg.content["arrays"].to_torch_state_dict()
+    )
+
+    # Select device
+    device = torch.device(
+        "cuda:0" if torch.cuda.is_available() else "cpu"
+    )
     model.to(device)
 
-    # Load the data
+    # Load local training data
     partition_id = int(context.node_config["partition-id"])
     trainloader, _ = load_data(partition_id, context)
 
-    # Pull algorithm-specific kwargs (e.g. proximal_mu) straight from config —
-    # trainers that don't need them just ignore extras via **kwargs
+    # Get training algorithm
     algorithm = context.run_config["algorithm"]
+
     trainer = get_trainer(
         algorithm,
         proximal_mu=msg.content["config"].get("proximal_mu", 0.0),
     )
 
-    # Call the training function
+    # Train the model
     train_loss = trainer.train(
         model,
         trainloader,
@@ -47,39 +52,66 @@ def train(msg: Message, context: Context):
         device,
     )
 
-    # Construct and return reply Message
+    # Return updated model and training metrics
     model_record = ArrayRecord(model.state_dict())
+
     metrics = {
         "train_loss": train_loss,
         "num-examples": len(trainloader.dataset),
     }
+
     metric_record = MetricRecord(metrics)
-    content = RecordDict({"arrays": model_record, "metrics": metric_record})
+
+    content = RecordDict(
+        {
+            "arrays": model_record,
+            "metrics": metric_record,
+        }
+    )
+
     return Message(content=content, reply_to=msg)
 
 
 @app.evaluate()
 def evaluate(msg: Message, context: Context):
-    """Evaluate the 3D UNet on local institutional MRI data."""
+    """Evaluate the 3D U-Net on local institutional MRI data."""
 
-    # Load the model and initialize it with the received weights
-    model = build_model()
-    model.load_state_dict(msg.content["arrays"].to_torch_state_dict())
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    # Create the model using the model registry
+    model = create_model("unet")
+
+    # Load the weights received from the server
+    model.load_state_dict(
+        msg.content["arrays"].to_torch_state_dict()
+    )
+
+    # Select device
+    device = torch.device(
+        "cuda:0" if torch.cuda.is_available() else "cpu"
+    )
     model.to(device)
 
-    # Load the data
+    # Load local validation data
     partition_id = int(context.node_config["partition-id"])
     _, valloader = load_data(partition_id, context)
 
-    # Call 3D sliding-window evaluation (Dice ET/TC/WT, HD95)
-    eval_metrics = test_fn(model, valloader, device)
+    # Evaluate the model
+    eval_metrics = test_fn(
+        model,
+        valloader,
+        device,
+    )
 
-    # Return all segmentation metrics to Flower
+    # Return evaluation metrics
     metrics = {
         **eval_metrics,
         "num-examples": len(valloader.dataset),
     }
+
     metric_record = MetricRecord(metrics)
-    content = RecordDict({"metrics": metric_record})
+
+    content = RecordDict(
+        {
+            "metrics": metric_record,
+        }
+    )
     return Message(content=content, reply_to=msg)
