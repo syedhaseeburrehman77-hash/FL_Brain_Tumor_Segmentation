@@ -36,6 +36,7 @@ def main(grid: Grid, context: Context) -> None:
         strategy_kwargs["proximal_mu"] = context.run_config["proximal_mu"]
 
     strategy = get_strategy(algorithm, **strategy_kwargs)
+    print(f"\n[Server] ---> Starting Federated Training ({algorithm.upper()}) for {num_rounds} rounds...")
 
     # Start strategy
     result = strategy.start(
@@ -55,6 +56,10 @@ def main(grid: Grid, context: Context) -> None:
 
 def global_evaluate(server_round: int, arrays: ArrayRecord) -> MetricRecord:
     """Evaluate model on central data."""
+
+    if server_round == 0:
+        return MetricRecord({"info": 0.0})
+    print(f"\n[Server] ---> Evaluating global 3D U-Net on unseen test set (Round {server_round})...")
 
     # Load the model using the model registry
     model = create_model("unet")
@@ -76,6 +81,7 @@ def global_evaluate(server_round: int, arrays: ArrayRecord) -> MetricRecord:
         test_dataloader,
         device,
     )
+    print(f"[Server] ---> Round {server_round} Test Results | Loss: {eval_metrics.get('eval_loss', 0.0):.4f} | Dice (ET/TC/WT): {eval_metrics.get('dice_et', 0.0):.4f} / {eval_metrics.get('dice_tc', 0.0):.4f} / {eval_metrics.get('dice_wt', 0.0):.4f}")
 
     # Return evaluation metrics
     return MetricRecord(eval_metrics)

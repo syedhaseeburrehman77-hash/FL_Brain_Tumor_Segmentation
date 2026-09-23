@@ -3,11 +3,9 @@
 import torch
 from flwr.app import ArrayRecord, Context, Message, MetricRecord, RecordDict
 from flwr.clientapp import ClientApp
-
 from task import load_data, test as test_fn
 from algorithms import get_trainer
 from models import create_model
-
 
 # Flower ClientApp
 app = ClientApp()
@@ -34,6 +32,7 @@ def train(msg: Message, context: Context):
     # Load local training data
     partition_id = int(context.node_config["partition-id"])
     trainloader, _ = load_data(partition_id, context)
+    print(f"\n[Client {partition_id}] ---> Loaded {len(trainloader.dataset)} patients from FeTS institution partition.")
 
     # Get training algorithm
     algorithm = context.run_config["algorithm"]
@@ -43,6 +42,7 @@ def train(msg: Message, context: Context):
         proximal_mu=msg.content["config"].get("proximal_mu", 0.0),
     )
 
+    print(f"[Client {partition_id}] ---> Starting 3D U-Net training on {device}...")
     # Train the model
     train_loss = trainer.train(
         model,
@@ -51,6 +51,7 @@ def train(msg: Message, context: Context):
         msg.content["config"]["lr"],
         device,
     )
+    print(f"[Client {partition_id}] ---> Training completed! Loss: {train_loss:.4f}")
 
     # Return updated model and training metrics
     model_record = ArrayRecord(model.state_dict())
@@ -70,7 +71,6 @@ def train(msg: Message, context: Context):
     )
 
     return Message(content=content, reply_to=msg)
-
 
 @app.evaluate()
 def evaluate(msg: Message, context: Context):
@@ -93,6 +93,7 @@ def evaluate(msg: Message, context: Context):
     # Load local validation data
     partition_id = int(context.node_config["partition-id"])
     _, valloader = load_data(partition_id, context)
+    print(f"\n[Client {partition_id}] ---> Evaluating on {len(valloader.dataset)} local validation patients...")
 
     # Evaluate the model
     eval_metrics = test_fn(
@@ -100,6 +101,7 @@ def evaluate(msg: Message, context: Context):
         valloader,
         device,
     )
+    print(f"[Client {partition_id}] ---> Evaluation completed! Loss: {eval_metrics.get('eval_loss', 0.0):.4f} | Dice WT: {eval_metrics.get('dice_wt', 0.0):.4f}")
 
     # Return evaluation metrics
     metrics = {
