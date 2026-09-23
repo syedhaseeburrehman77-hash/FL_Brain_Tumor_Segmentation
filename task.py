@@ -22,7 +22,7 @@ def get_loader(context=None):
     else:
         cfg = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))["tool"]["flwr"]["app"]["config"]
 
-     # Resolve relative paths against the repository root
+    # Resolve relative paths against the repository root
     project_root = Path(__file__).parent.resolve()
     
     data_root = Path(cfg["data-root"])
