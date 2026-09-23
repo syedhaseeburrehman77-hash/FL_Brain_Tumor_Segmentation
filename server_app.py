@@ -3,17 +3,18 @@ from flwr.app import ArrayRecord, ConfigRecord, Context, MetricRecord
 from flwr.serverapp import Grid, ServerApp
 
 from task import load_centralized_dataset, test
-
 from algorithms.server_strategies import get_strategy
+from models import create_model
 
-from ML_model import build_model
 
 # Create ServerApp
 app = ServerApp()
-@app.main()
 
+
+@app.main()
 def main(grid: Grid, context: Context) -> None:
     """Main entry point for the ServerApp."""
+
     algorithm = context.run_config["algorithm"]
 
     # Read run config
@@ -22,13 +23,12 @@ def main(grid: Grid, context: Context) -> None:
     lr: float = context.run_config["learning-rate"]
 
     # Load global model
-    global_model = build_model()   
+    global_model = create_model("unet")
     arrays = ArrayRecord(global_model.state_dict())
 
-    # Build kwargs relevant to whichever strategy is picked;
-    # extras are ignored by strategies that don't use them
+    # Build kwargs relevant to whichever strategy is picked
     strategy_kwargs = {
-        "fraction_evaluate": context.run_config["fraction-evaluate"],
+        "fraction_evaluate": fraction_evaluate,
         "min_available_nodes": context.run_config["num-clients"],
     }
 
@@ -37,7 +37,7 @@ def main(grid: Grid, context: Context) -> None:
 
     strategy = get_strategy(algorithm, **strategy_kwargs)
 
-    # Start strategy, run FedAvg for `num_rounds`
+    # Start strategy
     result = strategy.start(
         grid=grid,
         initial_arrays=arrays,
@@ -56,18 +56,26 @@ def main(grid: Grid, context: Context) -> None:
 def global_evaluate(server_round: int, arrays: ArrayRecord) -> MetricRecord:
     """Evaluate model on central data."""
 
-    # Load the model and initialize it with the received weights
-   
-    model = build_model() 
+    # Load the model using the model registry
+    model = create_model("unet")
+
+    # Initialize it with the received global weights
     model.load_state_dict(arrays.to_torch_state_dict())
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+    device = torch.device(
+        "cuda:0" if torch.cuda.is_available() else "cpu"
+    )
     model.to(device)
 
     # Load entire test set
     test_dataloader = load_centralized_dataset()
 
-    # Evaluate the global model on the test set
-    eval_metrics = test(model, test_dataloader, device)
+    # Evaluate the global model
+    eval_metrics = test(
+        model,
+        test_dataloader,
+        device,
+    )
 
-    # Return the evaluation metrics
+    # Return evaluation metrics
     return MetricRecord(eval_metrics)
