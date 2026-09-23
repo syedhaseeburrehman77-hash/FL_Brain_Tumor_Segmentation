@@ -46,8 +46,18 @@ serverapp = "server_app:app"
 clientapp = "client_app:app"
 
 [tool.flwr.app.config]
+<<<<<<< HEAD
 data-root = "data/MICCAI_FeTS2022_TrainingData"
 partition-csv = "data/MICCAI_FeTS2022_TrainingData/partitioning_1.csv"
+=======
+# Dataset paths (Official FeTS 2022 Multi-Institutional Data)
+data-root = "E:/researchfinal/MICCAI_FeTS2022_TrainingData/MICCAI_FeTS2022_TrainingData"
+# Use partitioning_1.csv (23 institutions) or partitioning_2.csv (33 institutions)
+partition-csv = "E:/researchfinal/MICCAI_FeTS2022_TrainingData/MICCAI_FeTS2022_TrainingData/partitioning_1.csv"
+
+# Use partitioning_1.csv (23 institutions) or partitioning_2.csv (33 institutions)
+
+>>>>>>> 8adad88 (Update project configuration)
 
 num-server-rounds = 5
 fraction-train = 1.0
@@ -59,6 +69,7 @@ global-test-fraction = 0.15
 
 fraction-fit = 1.0
 num-clients = 23
+safe-model = true
 algorithm = "fedavg"
 proximal_mu = 0.01
 model_name = "3DUnet"

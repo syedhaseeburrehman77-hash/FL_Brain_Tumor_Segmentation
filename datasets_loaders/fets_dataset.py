@@ -46,44 +46,6 @@ class FeTSDatasetLoader(BaseDatasetLoader):
 
     @staticmethod
     def get_train_transforms():
-<<<<< HEAD
-        return Compose([
-            LoadImaged(keys=("image", "label")),
-            EnsureChannelFirstd(keys=("image", "label")),
-            Orientationd(keys=("image", "label"), axcodes="RAS", labels=None),
-            Spacingd(keys=("image", "label"), pixdim=(1.0, 1.0, 1.0), mode=("bilinear", "nearest")),
-            NormalizeIntensityd(keys="image", nonzero=True, channel_wise=True),
-            MapLabelValued(keys="label", orig_labels=[4], target_labels=[3]),
-            CropForegroundd(keys=("image", "label"), source_key="image"),
-            RandCropByPosNegLabeld(
-                keys=("image", "label"),
-                label_key="label",
-                spatial_size=PATCH_SIZE,
-                pos=1,
-                neg=1,
-                num_samples=2,
-                image_key="image",
-                image_threshold=0,
-            ),
-            RandFlipd(keys=("image", "label"), prob=0.5, spatial_axis=0),
-            RandFlipd(keys=("image", "label"), prob=0.5, spatial_axis=1),
-            RandRotate90d(keys=("image", "label"), prob=0.5, max_k=3),
-            EnsureTyped(keys=("image", "label")),
-        ])
-
-    @staticmethod
-    def get_val_transforms():
-        return Compose([<<
-            LoadImaged(keys=("image", "label")),
-            EnsureChannelFirstd(keys=("image", "label")),
-            Orientationd(keys=("image", "label"), axcodes="RAS", labels=None),
-            Spacingd(keys=("image", "label"), pixdim=(1.0, 1.0, 1.0), mode=("bilinear", "nearest")),
-            NormalizeIntensityd(keys="image", nonzero=True, channel_wise=True),
-            MapLabelValued(keys="label", orig_labels=[4], target_labels=[3]),
-            CropForegroundd(keys=("image", "label"), source_key="image"),
-            EnsureTyped(keys=("image", "label")),
-        ])
-=======
         """Return MONAI preprocessing and augmentation transforms for training."""
         return Compose(
             [
@@ -92,6 +54,7 @@ class FeTSDatasetLoader(BaseDatasetLoader):
                 Orientationd(
                     keys=("image", "label"),
                     axcodes="RAS",
+                    labels=None,
                 ),
                 Spacingd(
                     keys=("image", "label"),
@@ -151,6 +114,7 @@ class FeTSDatasetLoader(BaseDatasetLoader):
                 Orientationd(
                     keys=("image", "label"),
                     axcodes="RAS",
+                    labels=None,
                 ),
                 Spacingd(
                     keys=("image", "label"),
@@ -174,7 +138,6 @@ class FeTSDatasetLoader(BaseDatasetLoader):
                 EnsureTyped(keys=("image", "label")),
             ]
         )
->>>>>>> 6df3d23 (Update FeTS dataset loader)
 
     # --- Internal File Matching ---
 
