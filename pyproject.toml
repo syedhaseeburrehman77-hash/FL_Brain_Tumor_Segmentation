@@ -8,9 +8,9 @@ version = "1.1.6"
 description = "FeTS 2022 3D MRI Federated Brain Tumor Segmentation with Flower"
 license = {file = "LICENSE"}
 
-requires-python = ">=3.11,<3.12"
+requires-python = ">=3.11,<3.13"
 dependencies = [
-    "flwr[simulation]==1.37.0",
+    "flwr[simulation]>=1.37.0",
     "torch==2.14.0",
     "monai==1.6.0",
     "nibabel==5.4.2",
@@ -45,11 +45,8 @@ serverapp = "server_app:app"
 clientapp = "client_app:app"
 
 [tool.flwr.app.config]
-# Dataset paths (Official FeTS 2022 Multi-Institutional Data)
-data-root = "C:/Users/syedh/Documents/BraT_Segmentation_FeTs2022/MICCAI_FeTS2022_TrainingData"
-
-# Use partitioning_1.csv (23 institutions) or partitioning_2.csv (33 institutions)
-partition-csv = "C:/Users/syedh/Documents/BraT_Segmentation_FeTs2022/MICCAI_FeTS2022_TrainingData/partitioning_1.csv"
+data-root = "data/MICCAI_FeTS2022_TrainingData"
+partition-csv = "data/MICCAI_FeTS2022_TrainingData/partitioning_1.csv"
 
 num-server-rounds = 5
 fraction-train = 1.0
@@ -62,7 +59,7 @@ global-test-fraction = 0.15
 fraction-fit = 1.0
 num-clients = 23
 algorithm = "fedavg"
-proximal-mu = 0.01
+proximal_mu = 0.01
 model_name = "3DUnet"
 
 # Client Participation ("fixed" or "sliding")
