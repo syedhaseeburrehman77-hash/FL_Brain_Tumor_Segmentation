@@ -23,8 +23,8 @@ def get_loader(context=None):
     else:
         cfg = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))["tool"]["flwr"]["app"]["config"]
 
-    # Resolve relative paths against the repository root
-    project_root = Path(__file__).parent.resolve()
+    # Resolve relative paths against the repository root (use workspace CWD first)
+    project_root = Path.cwd().resolve() if (Path.cwd() / "data").exists() else Path(__file__).parent.resolve()
     
     data_root = Path(cfg["data-root"])
     if not data_root.is_absolute():
