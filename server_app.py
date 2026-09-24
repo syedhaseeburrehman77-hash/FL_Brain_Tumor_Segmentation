@@ -41,7 +41,7 @@ def main(grid: Grid, context: Context) -> None:
     if algorithm == "fedprox":
         strategy_kwargs["proximal_mu"] = float(context.run_config["proximal_mu"])
 
-    strategy = get_strategy(algorithm, **strategy_kwargs)
+    strategy = get_strategy(algorithm, context=context, **strategy_kwargs)
     print(f"\n[Server] ---> Starting Federated Training ({algorithm.upper()}) for {num_rounds} rounds...", flush=True)
 
     # Start strategy

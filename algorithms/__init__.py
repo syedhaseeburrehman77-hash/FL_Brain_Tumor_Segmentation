@@ -4,6 +4,7 @@ from .fedprox import FedProxTrainer
 TRAINER_REGISTRY = {
     "fedavg": FedAvgTrainer,
     "fedprox": FedProxTrainer,
+    "regsimagg": FedAvgTrainer,
 }
 
 
