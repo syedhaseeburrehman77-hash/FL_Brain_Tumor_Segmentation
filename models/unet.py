@@ -18,6 +18,7 @@ class UNetModel(BaseModel):
             norm=("INSTANCE", {"affine": True}),
         )
 
+_CACHED_IN_KEYS: set[str] | None = None
 
 def instance_norm_state_keys() -> set[str]:
     """
@@ -26,6 +27,10 @@ def instance_norm_state_keys() -> set[str]:
     These parameters/statistics are kept local in FedIN-EDAR
     and are not aggregated by the server.
     """
+    global _CACHED_IN_KEYS
+    if _CACHED_IN_KEYS is not None:
+        return _CACHED_IN_KEYS
+    
     model = UNetModel().build()
 
     keys: set[str] = set()
@@ -37,4 +42,5 @@ def instance_norm_state_keys() -> set[str]:
             for state_name in module.state_dict().keys():
                 keys.add(f"{prefix}{state_name}")
 
+    _CACHED_IN_KEYS = keys
     return keys
