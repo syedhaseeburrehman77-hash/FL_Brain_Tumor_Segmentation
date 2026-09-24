@@ -43,18 +43,24 @@ def train(msg: Message, context: Context):
     model.load_state_dict(
         msg.content["arrays"].to_torch_state_dict()
     )
-    local_in_state = get_local_instance_norm_state(model)
     # Select device
     device = torch.device(
         "cuda:0" if torch.cuda.is_available() else "cpu"
     )
     model.to(device)
-    for key, value in local_in_state.items():
-        if key in model.state_dict():
-            model.state_dict()[key].copy_(value.to(device))
 
-       # Load local training data
+    # Restore this client's local InstanceNorm state if previously saved
     partition_id = int(context.node_config["partition-id"])
+    local_in_dir = Path("artifacts/local_instance_norm")
+    local_in_file = local_in_dir / f"client_{partition_id}.pt"
+
+    if local_in_file.exists():
+        local_in_state = torch.load(local_in_file, map_location=device)
+        for key, value in local_in_state.items():
+            if key in model.state_dict():
+                model.state_dict()[key].copy_(value.to(device))
+
+    # Load local training data
     config = msg.content["config"]
     profile_only = bool(
         config.get("fedindar-profile-only", False)
