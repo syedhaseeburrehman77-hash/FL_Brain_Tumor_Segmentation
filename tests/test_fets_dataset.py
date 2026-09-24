@@ -4,7 +4,7 @@ from datasets_loaders.fets_dataset import FeTSDatasetLoader
 
 def test_dataset_length():
     loader = FeTSDatasetLoader(
-        root_dir="data/MICCAI_FeTS2022_TrainingData",
+        data_root="data/MICCAI_FeTS2022_TrainingData",
         partition_csv="data/MICCAI_FeTS2022_TrainingData/partitioning_1.csv",
     )
     groups = loader._get_partitioned_groups()

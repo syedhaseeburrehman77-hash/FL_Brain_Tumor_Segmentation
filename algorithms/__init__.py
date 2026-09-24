@@ -5,6 +5,7 @@ TRAINER_REGISTRY = {
     "fedavg": FedAvgTrainer,
     "fedprox": FedProxTrainer,
     "regsimagg": FedAvgTrainer,
+     "fedindar": FedProxTrainer,
 }
 
 

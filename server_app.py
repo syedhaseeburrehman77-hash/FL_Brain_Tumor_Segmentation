@@ -37,9 +37,28 @@ def main(grid: Grid, context: Context) -> None:
         "fraction_evaluate": fraction_evaluate,
         "min_available_nodes": context.run_config["num-clients"],
     }
-
     if algorithm == "fedprox":
-        strategy_kwargs["proximal_mu"] = float(context.run_config["proximal_mu"])
+        strategy_kwargs["proximal_mu"] = float(
+            context.run_config["proximal_mu"]
+        )
+
+    elif algorithm == "fedindar":
+        strategy_kwargs["optimization_rounds"] = max(num_rounds - 1, 1)
+        strategy_kwargs["base_mu"] = float(
+            context.run_config.get("proximal_mu", 0.01)
+        )
+        strategy_kwargs["alpha"] = float(
+            context.run_config.get("fedindar-alpha", 2.0)
+        )
+        strategy_kwargs["temporal_beta"] = float(
+            context.run_config.get("fedindar-temporal-beta", 0.5)
+        )
+        strategy_kwargs["min_mu"] = float(
+            context.run_config.get("fedindar-min-mu", 0.001)
+        )
+        strategy_kwargs["max_mu"] = float(
+            context.run_config.get("fedindar-max-mu", 0.1)
+        )
 
     strategy = get_strategy(algorithm, context=context, **strategy_kwargs)
     print(f"\n[Server] ---> Starting Federated Training ({algorithm.upper()}) for {num_rounds} rounds...", flush=True)

@@ -48,8 +48,8 @@ clientapp = "client_app:app"
 [tool.flwr.app.config]
 data-root = "data/MICCAI_FeTS2022_TrainingData"
 partition-csv = "data/MICCAI_FeTS2022_TrainingData/partitioning_1.csv"
-
 num-server-rounds = 5
+
 fraction-train = 1.0
 fraction-evaluate = 1.0
 local-epochs = 1
@@ -65,7 +65,7 @@ proximal_mu = 0.01
 model_name = "3DUnet"
 
 # Client Participation ("fixed" or "sliding")
-collaborator-selector = "fixed"
+collaborator-selector = "sliding"
 collaborator-fraction = 0.2
 collaborator-selector-seed = 42
 

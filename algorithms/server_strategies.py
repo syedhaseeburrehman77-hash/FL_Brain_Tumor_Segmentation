@@ -1,12 +1,15 @@
 from flwr.serverapp.strategy import FedAvg, FedProx
 from .collaborator_selector import SlidingWindowTrainMixin
 from .regsimagg import RegSimAggStrategy
+from .fedindar import FedINDARStrategy
 
 STRATEGY_REGISTRY = {
     "fedavg": FedAvg,
     "fedprox": FedProx,
     "regsimagg": RegSimAggStrategy,
+    "fedindar": FedINDARStrategy,
 }
+
 
 def with_sliding_window(strategy_cls):
     """Dynamically compose any strategy class with SlidingWindowTrainMixin."""
