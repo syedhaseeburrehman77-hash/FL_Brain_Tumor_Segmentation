@@ -75,14 +75,19 @@ class SlidingWindowTrainMixin:
         if hasattr(self, "_global_state"):
             self._global_state = arrays.to_torch_state_dict()
 
+        is_fedindar = hasattr(self, "_messages_with_client_config")
+
         # Round 1:
         # Every client must send its tumour profile.
-        if server_round == 1:
+        if is_fedindar and server_round == 1:
             selected = node_ids
         else:
+            # For FedINDAR, training starts at round 2 (window 0)
+            window_round = (server_round - 1) if is_fedindar else server_round
+
             selected = select_sliding_window(
                 node_ids,
-                server_round,
+                window_round,
                 self.fraction,
                 self.seed,
             )
