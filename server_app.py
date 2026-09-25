@@ -6,6 +6,7 @@ from flwr.serverapp import Grid, ServerApp
 from task import get_loader, run_global_benchmark
 from algorithms.server_strategies import get_strategy
 from models import create_model
+from utils.summary import save_round_summary
 
 
 # Create ServerApp
@@ -74,6 +75,7 @@ def main(grid: Grid, context: Context) -> None:
         train_config=ConfigRecord(train_cfg),
         num_rounds=num_rounds,
     )
+    save_round_summary(result, algorithm, num_rounds)
 
     if context.run_config.get("save-model", True):
         # Save final model to artifacts/
