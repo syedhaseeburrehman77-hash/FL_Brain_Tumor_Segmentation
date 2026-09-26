@@ -5,7 +5,6 @@ __pycache__/
 
 # ignore artifacts directory
 artifacts/
-ARTIFACTS/
 
 # C extensions
 *.so
@@ -147,7 +146,6 @@ rabbitmq-data/
 
 data/
 *.pt
-final_model.pt
 
 # ActiveMQ
 activemq-data/
@@ -224,3 +222,5 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+uv.lock

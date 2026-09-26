@@ -14,16 +14,13 @@ CLIENT_HISTORY_FIELDS = (
     "target_et_voxels", "target_tc_voxels", "target_wt_voxels",
     "time_sec", "aggregation_weight",
     "institution", "total_cases",
-    "train_cases", "train_NCR_voxels", "train_ED_voxels", "train_ET_voxels",
-    "train_WT_voxels", "train_TC_voxels", "train_cases_with_WT",
-    "train_cases_with_TC", "train_cases_with_ET",
-    "val_cases", "val_NCR_voxels", "val_ED_voxels", "val_ET_voxels",
-    "val_WT_voxels", "val_TC_voxels", "val_cases_with_WT",
-    "val_cases_with_TC", "val_cases_with_ET",
-    "global_test_cases", "global_test_NCR_voxels", "global_test_ED_voxels",
-    "global_test_ET_voxels", "global_test_WT_voxels", "global_test_TC_voxels",
-    "global_test_cases_with_WT", "global_test_cases_with_TC",
-    "global_test_cases_with_ET",
+    "train_cases", "train_ET_voxels", "train_WT_voxels", "train_TC_voxels",
+    "train_cases_with_WT", "train_cases_with_TC", "train_cases_with_ET",
+    "val_cases", "val_ET_voxels", "val_WT_voxels", "val_TC_voxels",
+    "val_cases_with_WT", "val_cases_with_TC", "val_cases_with_ET",
+    "global_test_cases", "global_test_ET_voxels", "global_test_WT_voxels",
+    "global_test_TC_voxels", "global_test_cases_with_WT",
+    "global_test_cases_with_TC", "global_test_cases_with_ET",
 )
 
 
@@ -63,7 +60,7 @@ def _summarize_raw_cases(records: list[dict], prefix: str) -> dict:
     """Count original FeTS labels for a split without applying training transforms."""
     summary = {
         f"{prefix}_cases": len(records),
-        **{f"{prefix}_{region}_voxels": 0 for region in ("NCR", "ED", "ET", "WT", "TC")},
+        **{f"{prefix}_{region}_voxels": 0 for region in ("ET", "WT", "TC")},
         **{f"{prefix}_cases_with_{region}": 0 for region in ("WT", "TC", "ET")},
     }
     for record in records:
@@ -78,8 +75,8 @@ def _summarize_raw_cases(records: list[dict], prefix: str) -> dict:
         }
         counts["WT"] = counts["NCR"] + counts["ED"] + counts["ET"]
         counts["TC"] = counts["NCR"] + counts["ET"]
-        for region, count in counts.items():
-            summary[f"{prefix}_{region}_voxels"] += count
+        for region in ("ET", "WT", "TC"):
+            summary[f"{prefix}_{region}_voxels"] += counts[region]
         for region in ("WT", "TC", "ET"):
             summary[f"{prefix}_cases_with_{region}"] += int(counts[region] > 0)
     return summary
@@ -140,7 +137,7 @@ def merge_client_history(run_id: int, strategy, loader=None) -> Path:
     out_path = Path("artifacts/client_history.csv")
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with out_path.open("w", newline="", encoding="utf-8") as file:
-        writer = csv.DictWriter(file, fieldnames=CLIENT_HISTORY_FIELDS)
+        writer = csv.DictWriter(file, fieldnames=CLIENT_HISTORY_FIELDS, extrasaction="ignore")
         writer.writeheader()
         writer.writerows(rows)
     print(f"[Server] Client history saved to CSV: {out_path}", flush=True)
@@ -149,16 +146,46 @@ def merge_client_history(run_id: int, strategy, loader=None) -> Path:
 
 def save_round_summary(result, algorithm: str, num_rounds: int) -> pd.DataFrame:
     """Format and save round-by-round federated learning metrics summary."""
+    df_hist = None
+    hist_path = Path("artifacts/client_history.csv")
+    if hist_path.exists() and hist_path.stat().st_size > 0:
+        try:
+            df_hist = pd.read_csv(hist_path)
+        except Exception:
+            df_hist = None
+
+    if df_hist is None or df_hist.empty:
+        parts_dir = Path("artifacts/client_history_parts")
+        if parts_dir.exists():
+            csv_files = list(parts_dir.glob("*/*.csv"))
+            if csv_files:
+                try:
+                    df_hist = pd.concat([pd.read_csv(f) for f in csv_files], ignore_index=True)
+                except Exception:
+                    df_hist = None
+
     rows = []
     for r in range(1, num_rounds + 1):
         tr = result.train_metrics_clientapp.get(r, {})
         ev = result.evaluate_metrics_clientapp.get(r, {})
 
+        num_ex = tr.get("num-examples")
+        if (num_ex is None or pd.isna(num_ex)) and df_hist is not None:
+            r_rows = df_hist[
+                (df_hist["strategy"].astype(str).str.lower() == str(algorithm).lower())
+                & (pd.to_numeric(df_hist["round"], errors="coerce") == r)
+            ]
+            if not r_rows.empty and "num_examples" in r_rows.columns:
+                if "phase" in r_rows.columns and (r_rows["phase"] == "train").any():
+                    num_ex = float(r_rows[r_rows["phase"] == "train"]["num_examples"].sum())
+                else:
+                    num_ex = float(r_rows["num_examples"].sum())
+
         row = {
             "round": r,
             "strategy": algorithm,
             "profile_phase": tr.get("profile_phase", np.nan),
-            "num-examples": tr.get("num-examples", np.nan),
+            "num-examples": int(round(num_ex)) if (num_ex is not None and not pd.isna(num_ex)) else np.nan,
             "train_loss": tr.get("train_loss", np.nan),
             "eval_loss": ev.get("eval_loss", np.nan),
             "eval_dice_et": ev.get("dice_et", np.nan),
@@ -173,6 +200,8 @@ def save_round_summary(result, algorithm: str, num_rounds: int) -> pd.DataFrame:
         rows.append(row)
 
     df = pd.DataFrame(rows)
+    if "num-examples" in df.columns and not df["num-examples"].isna().all():
+        df["num-examples"] = df["num-examples"].astype("Int64")
 
     # 1. Print formatted table in terminal (Exact like previous project)
     header = f"FEDERATED LEARNING RESULTS SUMMARY ({algorithm.upper()})"
