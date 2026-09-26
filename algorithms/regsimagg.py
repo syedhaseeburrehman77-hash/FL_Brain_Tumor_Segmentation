@@ -11,7 +11,7 @@ from flwr.serverapp.strategy import FedAvg
 from flwr.serverapp.strategy.strategy_utils import aggregate_metricrecords
 
 _EPS = 1e-12
-
+_SIM_EPS = 1e-5
 
 def _state_from_reply(reply: Message, arrayrecord_key: str) -> OrderedDict[str, np.ndarray]:
     """Extract model weights from reply message into an OrderedDict of NumPy arrays."""
@@ -41,11 +41,12 @@ def _similarity_weights(
         distances = np.abs(totals - totals.mean())
     else:  # "paper_l1"
         centroid = np.mean(np.stack(vectors), axis=0)
-        distances = np.asarray([np.mean(np.abs(v - centroid)) for v in vectors])
+        distances = np.asarray([np.sum(np.abs(v - centroid)) for v in vectors],
+            dtype=np.float64,)
 
-    inverse = 1.0 / (distances + _EPS)
-    return inverse / inverse.sum(), distances
-
+    similarity = 1.0 / (distances + _SIM_EPS)
+    similarity_weights = similarity / similarity.sum()
+    return similarity_weights, distances
 
 def _aggregate_states(
     states: list[dict[str, np.ndarray]], weights: np.ndarray
