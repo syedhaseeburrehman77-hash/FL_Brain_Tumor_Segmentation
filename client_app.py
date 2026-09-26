@@ -1,7 +1,7 @@
 """FeTS 2022 3D MRI Brain Tumor Segmentation: Flower ClientApp."""
 
-import csv
 from pathlib import Path
+import time
 import numpy as np
 import torch
 from flwr.app import ArrayRecord, ConfigRecord, Context, Message, MetricRecord, RecordDict
@@ -9,6 +9,7 @@ from flwr.clientapp import ClientApp
 from task import load_data, test as test_fn
 from algorithms import get_trainer
 from models import create_model
+from utils.summary import append_client_history
 
 from models.unet import instance_norm_state_keys
 from algorithms.fedindar import (
@@ -169,6 +170,7 @@ def train(msg: Message, context: Context):
     print(f"[Client {partition_id}] ---> Starting 3D U-Net training on {device}...", flush=True)
 
     # Train the model
+    train_start = time.perf_counter()
     train_loss = trainer.train(
         model,
         trainloader,
@@ -176,6 +178,7 @@ def train(msg: Message, context: Context):
         config["lr"],
         device,
     )
+    train_time_sec = time.perf_counter() - train_start
 
     # Save local InstanceNorm state for FedINDAR
     if is_fedindar:
@@ -190,6 +193,11 @@ def train(msg: Message, context: Context):
 
     state = context.state.get("client_state", ConfigRecord({}))
     current_round = int(state.get("current_round", 1))
+    current_round = int(config.get("server-round", current_round))
+    append_client_history(
+        context.run_id, algorithm, current_round, partition_id, "train",
+        len(trainloader.dataset), float(train_loss), train_time_sec,
+    )
     context.state["client_state"] = ConfigRecord({
         "last_train_loss": float(train_loss),
         "current_round": current_round,
@@ -207,6 +215,7 @@ def train(msg: Message, context: Context):
             {
                 "arrays": model_record,
                 "metrics": MetricRecord(metrics),
+                "client-info": ConfigRecord({"institution-id": partition_id}),
             }
         ),
         reply_to=msg,
@@ -246,48 +255,29 @@ def evaluate(msg: Message, context: Context):
     print(f"\n[Client {partition_id}] ---> Evaluating on {len(valloader.dataset)} local validation patients...", flush=True)
 
     # Evaluate the model
+    eval_start = time.perf_counter()
     eval_metrics = test_fn(
         model,
         valloader,
         device,
     )
+    eval_time_sec = time.perf_counter() - eval_start
     print(f"[Client {partition_id}] ---> Evaluation completed! Loss: {eval_metrics.get('eval_loss', 0.0):.4f} | Dice WT: {eval_metrics.get('dice_wt', 0.0):.4f}", flush=True)
-
-    # Save client metrics to artifacts/client_history.csv
-    artifacts_dir = Path("artifacts")
-    artifacts_dir.mkdir(parents=True, exist_ok=True)
-    csv_file = artifacts_dir / "client_history.csv"
-    file_exists = csv_file.exists()
 
     state = context.state.get("client_state", ConfigRecord({}))
     train_loss = float(state.get("last_train_loss", 0.0))
-    current_round = int(state.get("current_round", 1))
+    current_round = int(config.get("server-round", state.get("current_round", 1)))
+
+    append_client_history(
+        context.run_id, algorithm, current_round, partition_id, "evaluate",
+        len(valloader.dataset), float(eval_metrics.get("eval_loss", 0.0)),
+        eval_time_sec, eval_metrics,
+    )
 
     context.state["client_state"] = ConfigRecord({
         "last_train_loss": train_loss,
         "current_round": current_round + 1,
     })
-
-    row = {
-        "strategy": algorithm,
-        "round": current_round,
-        "institution_id": partition_id,
-        "train_loss": train_loss,
-        "eval_loss": eval_metrics.get("eval_loss", 0.0),
-        "dice_et": eval_metrics.get("dice_et", 0.0),
-        "dice_tc": eval_metrics.get("dice_tc", 0.0),
-        "dice_wt": eval_metrics.get("dice_wt", 0.0),
-        "hd95_et": eval_metrics.get("hd95_et", 0.0),
-        "hd95_tc": eval_metrics.get("hd95_tc", 0.0),
-        "hd95_wt": eval_metrics.get("hd95_wt", 0.0),
-        "num_examples": len(valloader.dataset),
-    }
-
-    with open(csv_file, mode="a", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=list(row.keys()))
-        if not file_exists:
-            writer.writeheader()
-        writer.writerow(row)
 
     # Return evaluation metrics
     metrics = {

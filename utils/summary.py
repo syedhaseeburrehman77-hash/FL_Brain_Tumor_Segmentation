@@ -1,8 +1,150 @@
 """Federated Learning Round Summary and CSV Export."""
 
 from pathlib import Path
+import csv
+import nibabel as nib
 import numpy as np
 import pandas as pd
+
+
+CLIENT_HISTORY_FIELDS = (
+    "strategy", "round", "institution_id", "phase", "num_examples", "loss",
+    "dice_et", "dice_tc", "dice_wt", "hd95_et", "hd95_tc", "hd95_wt",
+    "pred_et_voxels", "pred_tc_voxels", "pred_wt_voxels",
+    "target_et_voxels", "target_tc_voxels", "target_wt_voxels",
+    "time_sec", "aggregation_weight",
+    "institution", "total_cases",
+    "train_cases", "train_NCR_voxels", "train_ED_voxels", "train_ET_voxels",
+    "train_WT_voxels", "train_TC_voxels", "train_cases_with_WT",
+    "train_cases_with_TC", "train_cases_with_ET",
+    "val_cases", "val_NCR_voxels", "val_ED_voxels", "val_ET_voxels",
+    "val_WT_voxels", "val_TC_voxels", "val_cases_with_WT",
+    "val_cases_with_TC", "val_cases_with_ET",
+    "global_test_cases", "global_test_NCR_voxels", "global_test_ED_voxels",
+    "global_test_ET_voxels", "global_test_WT_voxels", "global_test_TC_voxels",
+    "global_test_cases_with_WT", "global_test_cases_with_TC",
+    "global_test_cases_with_ET",
+)
+
+
+def append_client_history(
+    run_id: int, strategy: str, round_id: int, institution_id: int,
+    phase: str, num_examples: int, loss: float, time_sec: float,
+    metrics: dict | None = None,
+) -> None:
+    """Write one client/round/phase row to a run-specific part CSV."""
+    metrics = metrics or {}
+    row = {key: "" for key in CLIENT_HISTORY_FIELDS}
+    row.update({
+        "strategy": strategy,
+        "round": int(round_id),
+        "institution_id": int(institution_id),
+        "phase": phase,
+        "num_examples": int(num_examples),
+        "loss": float(loss),
+        "time_sec": float(time_sec),
+    })
+    for key in CLIENT_HISTORY_FIELDS:
+        if key in metrics:
+            row[key] = float(metrics[key])
+
+    parts_dir = Path("artifacts/client_history_parts") / str(run_id)
+    parts_dir.mkdir(parents=True, exist_ok=True)
+    csv_file = parts_dir / f"client_{institution_id}.csv"
+    write_header = not csv_file.exists()
+    with csv_file.open("a", newline="", encoding="utf-8") as file:
+        writer = csv.DictWriter(file, fieldnames=CLIENT_HISTORY_FIELDS)
+        if write_header:
+            writer.writeheader()
+        writer.writerow(row)
+
+
+def _summarize_raw_cases(records: list[dict], prefix: str) -> dict:
+    """Count original FeTS labels for a split without applying training transforms."""
+    summary = {
+        f"{prefix}_cases": len(records),
+        **{f"{prefix}_{region}_voxels": 0 for region in ("NCR", "ED", "ET", "WT", "TC")},
+        **{f"{prefix}_cases_with_{region}": 0 for region in ("WT", "TC", "ET")},
+    }
+    for record in records:
+        label_path = record.get("label") or record.get("seg")
+        if label_path is None:
+            continue
+        labels = np.asanyarray(nib.load(str(label_path)).dataobj)
+        counts = {
+            "NCR": int(np.count_nonzero(labels == 1)),
+            "ED": int(np.count_nonzero(labels == 2)),
+            "ET": int(np.count_nonzero(labels == 4)),
+        }
+        counts["WT"] = counts["NCR"] + counts["ED"] + counts["ET"]
+        counts["TC"] = counts["NCR"] + counts["ET"]
+        for region, count in counts.items():
+            summary[f"{prefix}_{region}_voxels"] += count
+        for region in ("WT", "TC", "ET"):
+            summary[f"{prefix}_cases_with_{region}"] += int(counts[region] > 0)
+    return summary
+
+
+def _dataset_distribution(loader) -> tuple[dict[int, dict], dict]:
+    """Summarize the loader's exact train/validation/global-test partitioning."""
+    per_client = {}
+    global_test_records = []
+    groups = loader._get_partitioned_groups()
+    for client_id, (institution, records) in enumerate(groups):
+        trainval_records, test_records = loader._split_global_test(records, client_id)
+        global_test_records.extend(test_records)
+
+        rng = np.random.default_rng(loader.seed + client_id)
+        n_val = max(1, int(round(len(trainval_records) * 0.15)))
+        val_indices = set(rng.permutation(len(trainval_records))[:n_val].tolist())
+        train_records = [r for i, r in enumerate(trainval_records) if i not in val_indices]
+        val_records = [r for i, r in enumerate(trainval_records) if i in val_indices]
+
+        per_client[client_id] = {
+            "institution": institution,
+            "total_cases": len(trainval_records),
+        }
+        per_client[client_id].update(_summarize_raw_cases(train_records, "train"))
+        per_client[client_id].update(_summarize_raw_cases(val_records, "val"))
+
+    global_test = _summarize_raw_cases(global_test_records, "global_test")
+    return per_client, global_test
+
+
+def merge_client_history(run_id: int, strategy, loader=None) -> Path:
+    """Merge per-client rows and attach strategy aggregation weights."""
+    parts_dir = Path("artifacts/client_history_parts") / str(run_id)
+    rows = []
+    if parts_dir.exists():
+        for csv_file in sorted(parts_dir.glob("client_*.csv")):
+            with csv_file.open("r", newline="", encoding="utf-8") as file:
+                rows.extend(csv.DictReader(file))
+
+    weights_by_round_client = {}
+    for audit in getattr(strategy, "aggregation_audit", []):
+        for institution_id, weight in zip(
+            audit.get("institution_ids", []), audit.get("aggregation_weights", [])
+        ):
+            weights_by_round_client[(int(audit["round"]), int(institution_id))] = float(weight)
+    for row in rows:
+        key = (int(row["round"]), int(row["institution_id"]))
+        if key in weights_by_round_client:
+            row["aggregation_weight"] = weights_by_round_client[key]
+
+    if loader is not None:
+        distribution_by_client, global_test_distribution = _dataset_distribution(loader)
+        for row in rows:
+            row.update(distribution_by_client.get(int(row["institution_id"]), {}))
+            row.update(global_test_distribution)
+
+    out_path = Path("artifacts/client_history.csv")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with out_path.open("w", newline="", encoding="utf-8") as file:
+        writer = csv.DictWriter(file, fieldnames=CLIENT_HISTORY_FIELDS)
+        writer.writeheader()
+        writer.writerows(rows)
+    print(f"[Server] Client history saved to CSV: {out_path}", flush=True)
+    return out_path
 
 
 def save_round_summary(result, algorithm: str, num_rounds: int) -> pd.DataFrame:

@@ -66,6 +66,12 @@ def test(net: torch.nn.Module, testloader, device: torch.device) -> dict[str, fl
         "hd95_et": 0.0,
         "hd95_tc": 0.0,
         "hd95_wt": 0.0,
+        "pred_et_voxels": 0.0,
+        "pred_tc_voxels": 0.0,
+        "pred_wt_voxels": 0.0,
+        "target_et_voxels": 0.0,
+        "target_tc_voxels": 0.0,
+        "target_wt_voxels": 0.0,
     }
     with torch.no_grad():
         for batch in testloader:
@@ -81,7 +87,11 @@ def test(net: torch.nn.Module, testloader, device: torch.device) -> dict[str, fl
             totals["eval_loss"] += criterion(logits, labels).item()
             # Calculate Dice and Hausdorff HD95 for ET, TC, and WT
             region_scores = fets_region_metrics(logits, labels)
-            for key in ("dice_et", "dice_tc", "dice_wt", "hd95_et", "hd95_tc", "hd95_wt"):
+            for key in (
+                "dice_et", "dice_tc", "dice_wt", "hd95_et", "hd95_tc", "hd95_wt",
+                "pred_et_voxels", "pred_tc_voxels", "pred_wt_voxels",
+                "target_et_voxels", "target_tc_voxels", "target_wt_voxels",
+            ):
                 if key in region_scores:
                     totals[key] += region_scores[key]
     count = max(len(testloader), 1)

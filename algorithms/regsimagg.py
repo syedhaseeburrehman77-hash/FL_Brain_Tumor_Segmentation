@@ -95,6 +95,11 @@ class RegSimAggStrategy(FedAvg):
         if not valid_replies:
             return None, MetricRecord()
 
+        institution_ids = [
+            int(reply.content["client-info"]["institution-id"])
+            for reply in valid_replies
+        ]
+
         states = [_state_from_reply(reply, self.arrayrecord_key) for reply in valid_replies]
         counts = np.asarray(
             [float(reply.content["metrics"][self.weighted_by_key]) for reply in valid_replies],
@@ -137,6 +142,7 @@ class RegSimAggStrategy(FedAvg):
                 "similarity_weights": similarity_weights.tolist(),
                 "temporal_change": temporal_change.tolist(),
                 "aggregation_weights": final_weights.tolist(),
+                "institution_ids": institution_ids,
             }
         )
 
