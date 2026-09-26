@@ -1,6 +1,7 @@
 """FeTS 2022 3D MRI Brain Tumor Segmentation: Task and Evaluation Module."""
 
 import csv
+import gc
 import tomllib
 from pathlib import Path
 import torch
@@ -147,6 +148,12 @@ def test(net: torch.nn.Module, testloader, device: torch.device) -> dict[str, fl
             ):
                 if key in region_scores:
                     totals[key] += region_scores[key]
+
+            # Immediately release large 3D tensors from memory
+            del images, labels, logits, region_scores
+            if device.type == "cuda":
+                torch.cuda.empty_cache()
+            gc.collect()
     count = max(len(testloader), 1)
     return {k: round(v / count, 4) for k, v in totals.items()}
 

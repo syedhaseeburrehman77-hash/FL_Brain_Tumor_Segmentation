@@ -1,5 +1,6 @@
 """FeTS 2022 3D MRI Brain Tumor Segmentation: Flower ClientApp."""
 
+import gc
 from pathlib import Path
 import time
 import numpy as np
@@ -221,6 +222,10 @@ def train(msg: Message, context: Context):
         "num-examples": len(trainloader.dataset),
     }
 
+    if device.type == "cuda":
+        torch.cuda.empty_cache()
+    gc.collect()
+
     return Message(
         content=RecordDict(
             {
@@ -295,6 +300,10 @@ def evaluate(msg: Message, context: Context):
         **eval_metrics,
         "num-examples": len(valloader.dataset),
     }
+
+    if device.type == "cuda":
+        torch.cuda.empty_cache()
+    gc.collect()
 
     return Message(
         content=RecordDict(
