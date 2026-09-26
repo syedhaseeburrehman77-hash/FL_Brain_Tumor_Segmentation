@@ -12,11 +12,11 @@ from monai.losses import DiceCELoss
 from utils.metrics import fets_region_metrics
 
 _LOADER = None
+_LOADER_KEY = None
+
 
 def get_loader(context=None):
-    global _LOADER
-    if _LOADER is not None:
-        return _LOADER
+    global _LOADER, _LOADER_KEY
     
     if context is not None:
         cfg = context.run_config
@@ -26,20 +26,73 @@ def get_loader(context=None):
     # Resolve relative paths against the repository root (use workspace CWD first)
     project_root = Path.cwd().resolve() if (Path.cwd() / "data").exists() else Path(__file__).parent.resolve()
     
-    data_root = Path(cfg["data-root"])
+    data_root = Path(cfg.get("data-root", "data/MICCAI_FeTS2022_TrainingData"))
     if not data_root.is_absolute():
         data_root = project_root / data_root
-    partition_csv = Path(cfg["partition-csv"])
+
+    # Support all variations: partition-csv, partition_csv, partitioning-csv, partitioning_csv, partitioning
+    raw_p = None
+    if context is not None:
+        raw_p = (
+            context.run_config.get("partition-csv")
+            or context.run_config.get("partition_csv")
+            or context.run_config.get("partitioning-csv")
+            or context.run_config.get("partitioning_csv")
+            or context.run_config.get("partitioning")
+        )
+    if not raw_p:
+        raw_p = (
+            cfg.get("partition-csv")
+            or cfg.get("partition_csv")
+            or cfg.get("partitioning-csv")
+            or cfg.get("partitioning_csv")
+            or cfg.get("partitioning")
+            or "data/MICCAI_FeTS2022_TrainingData/partitioning_1.csv"
+        )
+
+    raw_p_str = str(raw_p).strip()
+    if raw_p_str in ("2", "partitioning_2", "partitioning_2.csv") or "partitioning_2" in raw_p_str:
+        candidate = data_root / "partitioning_2.csv"
+        partition_csv = candidate if candidate.exists() else Path(raw_p_str)
+    elif raw_p_str in ("1", "partitioning_1", "partitioning_1.csv"):
+        candidate = data_root / "partitioning_1.csv"
+        partition_csv = candidate if candidate.exists() else Path(raw_p_str)
+    else:
+        partition_csv = Path(raw_p_str)
+
+    # If num-clients is > 23 and partition_csv is still partitioning_1, auto-select partitioning_2
+    num_clients = int(cfg.get("num-clients", cfg.get("num_clients", 0)))
+    if context is not None:
+        num_clients = int(context.run_config.get("num-clients", context.run_config.get("num_clients", num_clients)))
+    
+    if num_clients > 23 and "partitioning_1" in partition_csv.name:
+        candidate_2 = data_root / "partitioning_2.csv"
+        if candidate_2.exists():
+            partition_csv = candidate_2
+
     if not partition_csv.is_absolute():
-        partition_csv = project_root / partition_csv
+        if (project_root / partition_csv).exists():
+            partition_csv = project_root / partition_csv
+        elif (data_root / partition_csv.name).exists():
+            partition_csv = data_root / partition_csv.name
+        else:
+            partition_csv = project_root / partition_csv
+
+    global_test_fraction = float(cfg.get("global-test-fraction", 0.15))
+    seed = int(cfg.get("seed", 42))
+
+    cache_key = (str(partition_csv.resolve()), str(data_root.resolve()), global_test_fraction, seed)
+    if _LOADER is not None and _LOADER_KEY == cache_key:
+        return _LOADER
 
     _LOADER = create_dataset(
         "fets2022",
         root_dir=data_root,
         partition_csv=partition_csv,
-        global_test_fraction=float(cfg.get("global-test-fraction", 0.15)),
-        seed=int(cfg.get("seed", 42)),
+        global_test_fraction=global_test_fraction,
+        seed=seed,
     )
+    _LOADER_KEY = cache_key
     return _LOADER
 
 def load_data(partition_id: int, context):

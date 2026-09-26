@@ -299,9 +299,17 @@ class FeTSDatasetLoader(BaseDatasetLoader):
         groups = self._get_partitioned_groups()
 
         if not 0 <= partition_id < len(groups):
+            # If partition_id exceeds groups and partitioning_2.csv exists, auto-load it
+            alt_csv = self.root_dir / "partitioning_2.csv"
+            if alt_csv.exists() and self.partition_csv.name != "partitioning_2.csv":
+                self.partition_csv = alt_csv
+                self._groups = None
+                groups = self._get_partitioned_groups()
+
+        if not 0 <= partition_id < len(groups):
             raise IndexError(
                 f"Partition {partition_id} invalid "
-                f"(found {len(groups)} partitions)"
+                f"(found {len(groups)} partitions in {self.partition_csv.name})"
             )
 
         # Reserve global-test cases first.
