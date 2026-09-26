@@ -40,11 +40,22 @@ def restore_local_instance_norm(model: torch.nn.Module, partition_id: int, devic
     local_in_file = Path("artifacts/local_instance_norm") / f"client_{partition_id}.pt"
 
     if local_in_file.exists():
-        local_in_state = torch.load(local_in_file, map_location=device)
-        for key, value in local_in_state.items():
-            if key in model.state_dict():
-                model.state_dict()[key].copy_(value.to(device))
-        return True
+        try:
+            local_in_state = torch.load(local_in_file, map_location="cpu")
+        except Exception as e:
+            print(
+                f"[Client {partition_id}] Warning: Could not deserialize {local_in_file} ({e}). "
+                "Starting with global InstanceNorm.",
+                flush=True,
+            )
+            return False
+
+        if isinstance(local_in_state, dict):
+            state = model.state_dict()
+            for key, value in local_in_state.items():
+                if key in state and isinstance(value, torch.Tensor):
+                    state[key].copy_(value.to(device))
+            return True
     return False
 
 

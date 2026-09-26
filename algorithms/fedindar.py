@@ -131,10 +131,12 @@ class FedINDARStrategy(FedAvg):
                 not profile_only
                 and node_id not in self.mu_by_node
             ):
-                raise RuntimeError(
-                    f"FedIN-EDAR cannot train node {node_id}: "
-                    "its profile is missing. Restart the run."
+                print(
+                    f"[FedIN-EDAR] Warning: node {node_id} profile is missing, "
+                    f"falling back to base_mu={self.base_mu}",
+                    flush=True,
                 )
+                self.mu_by_node[node_id] = self.base_mu
 
             node_config = ConfigRecord(dict(config))
 
