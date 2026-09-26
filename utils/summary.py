@@ -2,7 +2,6 @@
 
 from pathlib import Path
 import csv
-import nibabel as nib
 import numpy as np
 import pandas as pd
 
@@ -13,14 +12,7 @@ CLIENT_HISTORY_FIELDS = (
     "pred_et_voxels", "pred_tc_voxels", "pred_wt_voxels",
     "target_et_voxels", "target_tc_voxels", "target_wt_voxels",
     "time_sec", "aggregation_weight",
-    "institution", "total_cases",
-    "train_cases", "train_ET_voxels", "train_WT_voxels", "train_TC_voxels",
-    "train_cases_with_WT", "train_cases_with_TC", "train_cases_with_ET",
-    "val_cases", "val_ET_voxels", "val_WT_voxels", "val_TC_voxels",
-    "val_cases_with_WT", "val_cases_with_TC", "val_cases_with_ET",
-    "global_test_cases", "global_test_ET_voxels", "global_test_WT_voxels",
-    "global_test_TC_voxels", "global_test_cases_with_WT",
-    "global_test_cases_with_TC", "global_test_cases_with_ET",
+    "institution", "total_cases", "train_cases", "val_cases",
 )
 
 
@@ -50,40 +42,14 @@ def append_client_history(
     csv_file = parts_dir / f"client_{institution_id}.csv"
     write_header = not csv_file.exists()
     with csv_file.open("a", newline="", encoding="utf-8") as file:
-        writer = csv.DictWriter(file, fieldnames=CLIENT_HISTORY_FIELDS)
+        writer = csv.DictWriter(file, fieldnames=CLIENT_HISTORY_FIELDS, extrasaction="ignore")
         if write_header:
             writer.writeheader()
         writer.writerow(row)
 
 
-def _summarize_raw_cases(records: list[dict], prefix: str) -> dict:
-    """Count original FeTS labels for a split without applying training transforms."""
-    summary = {
-        f"{prefix}_cases": len(records),
-        **{f"{prefix}_{region}_voxels": 0 for region in ("ET", "WT", "TC")},
-        **{f"{prefix}_cases_with_{region}": 0 for region in ("WT", "TC", "ET")},
-    }
-    for record in records:
-        label_path = record.get("label") or record.get("seg")
-        if label_path is None:
-            continue
-        labels = np.asanyarray(nib.load(str(label_path)).dataobj)
-        counts = {
-            "NCR": int(np.count_nonzero(labels == 1)),
-            "ED": int(np.count_nonzero(labels == 2)),
-            "ET": int(np.count_nonzero(labels == 4)),
-        }
-        counts["WT"] = counts["NCR"] + counts["ED"] + counts["ET"]
-        counts["TC"] = counts["NCR"] + counts["ET"]
-        for region in ("ET", "WT", "TC"):
-            summary[f"{prefix}_{region}_voxels"] += counts[region]
-        for region in ("WT", "TC", "ET"):
-            summary[f"{prefix}_cases_with_{region}"] += int(counts[region] > 0)
-    return summary
-
-
 def _dataset_distribution(loader) -> tuple[dict[int, dict], dict]:
-    """Summarize the loader's exact train/validation/global-test partitioning."""
+    """Summarize the loader's exact train/validation/global-test case counts."""
     per_client = {}
     global_test_records = []
     groups = loader._get_partitioned_groups()
@@ -100,11 +66,11 @@ def _dataset_distribution(loader) -> tuple[dict[int, dict], dict]:
         per_client[client_id] = {
             "institution": institution,
             "total_cases": len(trainval_records),
+            "train_cases": len(train_records),
+            "val_cases": len(val_records),
         }
-        per_client[client_id].update(_summarize_raw_cases(train_records, "train"))
-        per_client[client_id].update(_summarize_raw_cases(val_records, "val"))
 
-    global_test = _summarize_raw_cases(global_test_records, "global_test")
+    global_test = {"global_test_cases": len(global_test_records)}
     return per_client, global_test
 
 

@@ -163,7 +163,10 @@ def plot_client_distribution(
     ]
 
     fig, ax = plt.subplots(figsize=(8, 4.8))
-    boxes = ax.boxplot(values, labels=labels, patch_artist=True, showfliers=False)
+    try:
+        boxes = ax.boxplot(values, tick_labels=labels, patch_artist=True, showfliers=False)
+    except TypeError:
+        boxes = ax.boxplot(values, labels=labels, patch_artist=True, showfliers=False)
     rng = np.random.default_rng(42)
     for i, (strategy, scores) in enumerate(zip(strategies, values), start=1):
         boxes["boxes"][i - 1].set_facecolor(
@@ -234,8 +237,10 @@ def plot_heterogeneity_robustness(
         x_col, x_label = "train_cases", "Institution training cases"
     elif "total_cases" in df.columns and df["total_cases"].notna().any():
         x_col, x_label = "total_cases", "Institution train + validation cases"
+    elif "num_examples" in df.columns and df["num_examples"].notna().any():
+        x_col, x_label = "num_examples", "Institution evaluated cases"
     else:
-        raise ValueError("CSV needs train_cases or total_cases for this plot.")
+        raise ValueError("CSV needs train_cases, total_cases, or num_examples for this plot.")
 
     fig, ax = plt.subplots(figsize=(7.5, 4.8))
     for strategy, data in df.groupby("strategy"):
