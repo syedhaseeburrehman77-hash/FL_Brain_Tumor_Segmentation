@@ -21,7 +21,7 @@ def main(grid: Grid, context: Context) -> None:
     get_loader(context)
 
     algorithm = context.run_config["algorithm"]
-    model_name = context.run_config.get("model_name", "unet").lower()
+    model_name = context.run_config.get("model_name").lower()
 
     # Read run config
     fraction_evaluate: float = context.run_config["fraction-evaluate"]

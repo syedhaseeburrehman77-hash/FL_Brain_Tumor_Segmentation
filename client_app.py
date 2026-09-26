@@ -52,7 +52,7 @@ def train(msg: Message, context: Context):
     """Train the 3D U-Net on local institutional MRI data."""
 
     # Create the model using the model registry
-    model_name = context.run_config.get("model_name", "unet").lower()
+    model_name = context.run_config.get("model_name").lower()
     model = create_model(model_name)
 
     # Load the weights received from the server
@@ -218,7 +218,7 @@ def evaluate(msg: Message, context: Context):
     """Evaluate the 3D U-Net on local institutional MRI data."""
 
     # Create the model using the model registry
-    model_name = context.run_config.get("model_name", "unet").lower()
+    model_name = context.run_config.get("model_name").lower()
     model = create_model(model_name)
     partition_id = int(context.node_config["partition-id"])
 
