@@ -75,8 +75,20 @@ def main(grid: Grid, context: Context) -> None:
         train_config=ConfigRecord(train_cfg),
         num_rounds=num_rounds,
     )
-    merge_client_history(context.run_id, strategy, get_loader(context))
+    history_csv = merge_client_history(context.run_id, strategy, get_loader(context))
     save_round_summary(result, algorithm, num_rounds)
+
+    # Generate paper figures automatically once all client-history rows are merged.
+    try:
+        from utils.plot import generate_all_paper_figures
+
+        generate_all_paper_figures(history_csv)
+    except Exception as exc:
+        print(
+            f"[Server] Automatic figure generation failed: "
+            f"{type(exc).__name__}: {exc}",
+            flush=True,
+        )
 
     if context.run_config.get("save-model", True):
         # Save final model to artifacts/

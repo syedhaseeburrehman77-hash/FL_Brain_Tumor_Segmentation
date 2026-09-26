@@ -15,6 +15,7 @@ dependencies = [
     "monai==1.6.0",
     "nibabel==5.4.2",
     "pandas==3.0.6",
+    "matplotlib>=3.8",
     "scipy==1.17.1",
     "numpy==2.4.1",
     "pytest>=8.0.0",
@@ -65,7 +66,7 @@ proximal_mu = 0.01
 model_name = "3DUnet"
 
 # Client Participation ("fixed" or "sliding")
-collaborator-selector = "sliding"
+collaborator-selector = "fixed"
 collaborator-fraction = 0.2
 collaborator-selector-seed = 42
 
